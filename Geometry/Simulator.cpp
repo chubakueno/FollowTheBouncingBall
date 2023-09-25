@@ -66,12 +66,12 @@ struct Segment {
 	Ray asRay;
 	double length;
 	int id;
-	Segment(const v2d &p1, const v2d &p2, int id) :p1(p1), p2(p2), id(id) {
+	Segment(const v2d& p1, const v2d& p2, int id) :p1(p1), p2(p2), id(id) {
 		normal = v2d(p1.y - p2.y, p2.x - p1.x).normalize();
 		asRay = Ray(p1, p2 - p1);
 		length = (p1 - p2).mag();
 	}
-	v2d reflect(const v2d &ray) const {
+	v2d reflect(const v2d& ray) const {
 		v2d reflected = ray - 2.0 * normal * (normal * ray);
 		return reflected;
 	}
@@ -100,7 +100,7 @@ bool Ray::intersect(const Ray& r, double& a, double& b) const {
 	b = (dir.y * dx - dir.x * dy) / crossp;
 	return (comp_lenient(0, a) && comp_lenient(0, b));
 }
-bool Ray::intersect(const Segment &s, Collision& collision) {
+bool Ray::intersect(const Segment& s, Collision& collision) {
 	double a = 0, b = 0;
 	bool success = intersect(s.asRay, a, b);
 	if (success && comp_lenient(b, s.length)) {
@@ -117,7 +117,7 @@ typedef Ray Ball;
 const int SCREEN_BIT = (1 << 20);
 const int BOTTOM_BIT = (1 << 21);
 const double SIMULTANEOUS_EPS = 1e-7;
-const double BALL_INTERVAL=1;
+const double BALL_INTERVAL = 1;
 
 bool is_screen(int id) {
 	return id & SCREEN_BIT;
