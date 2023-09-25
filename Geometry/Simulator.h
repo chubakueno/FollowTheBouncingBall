@@ -47,13 +47,13 @@ struct Segment {
     v2d normal;
     Ray asRay;
     double length;
-    int id;
+    int object_id;
     Segment(const v2d& p1, const v2d& p2, int id);
     v2d reflect(v2d &ray) const;
 };
 
 struct Collision {
-    int id_ball, id_segment;
+    int ball_index, object_id;
     Ray continued, reflected;
     double t;
     Collision();

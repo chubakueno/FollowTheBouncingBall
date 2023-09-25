@@ -243,9 +243,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 v2d p2 = TransformPoint(segment.p2);
                 MoveToEx(hdc, (int)p1.x, (int)p1.y, nullptr);
                 LineTo(hdc, (int)p2.x, (int)p2.y);
-                if (segment.id < centers.size()) {
-                    centers[segment.id] = centers[segment.id] + segment.p1;
-                    ++pcount[segment.id];
+                if (segment.object_id < centers.size()) {
+                    centers[segment.object_id] = centers[segment.object_id] + segment.p1;
+                    ++pcount[segment.object_id];
                 }
             }
 

@@ -65,8 +65,8 @@ struct Segment {
 	v2d normal;
 	Ray asRay;
 	double length;
-	int id;
-	Segment(const v2d& p1, const v2d& p2, int id) :p1(p1), p2(p2), id(id) {
+	int object_id;
+	Segment(const v2d& p1, const v2d& p2, int id) :p1(p1), p2(p2), object_id(id) {
 		normal = v2d(p1.y - p2.y, p2.x - p1.x).normalize();
 		asRay = Ray(p1, p2 - p1);
 		length = (p1 - p2).mag();
@@ -78,8 +78,8 @@ struct Segment {
 };
 
 struct Collision {
-	int id_ball = -1;
-	int id_segment = -1;
+	int ball_index = -1;
+	int object_id = -1;
 	Ray continued;
 	Ray reflected;
 	double t = 0;
@@ -149,19 +149,20 @@ struct GameState {
 		cout << endl;
 	}
 
-	Collision getNearestCollision(Ball ball, int id_ball) {
+	Collision getNearestCollision(int ball_index) {
+		Ball ball = balls[ball_index];
 		double mint = INF;
 		Collision collision;
 		Collision cur_collision;
 		for (const Segment& s : segments) {
-			if (!is_screen(s.id) && lives[s.id] <= 0) continue;
+			if (!is_screen(s.object_id) && lives[s.object_id] <= 0) continue;
 			bool intersected = ball.intersect(s, cur_collision);
 			if (intersected && comp_strict(0, cur_collision.t)) {
 				if (mint > cur_collision.t) {//we want exact comparison here without EPS
 					mint = cur_collision.t;
 					collision = cur_collision;
-					collision.id_ball = id_ball;
-					collision.id_segment = s.id;
+					collision.ball_index = ball_index;
+					collision.object_id = s.object_id;
 				}
 			}
 		}
@@ -173,9 +174,8 @@ struct GameState {
 void GameState::simulateStep() {
 	if (dirty) {
 		collisions = vector<Collision>();
-		for (int id_ball = 0; id_ball < balls.size(); ++id_ball) {
-			Ball ball = balls[id_ball];
-			Collision collision = getNearestCollision(ball, id_ball);
+		for (int i = 0; i < balls.size(); ++i) {
+			Collision collision = getNearestCollision(i);
 			collisions.push_back(collision);
 		}
 		dirty = false;
@@ -191,7 +191,7 @@ void GameState::simulateStep() {
 			collisions[i].t -= time_to_next_ball;
 		}
 		balls.push_back(Ball(gun));
-		collisions.push_back(getNearestCollision(balls.back(), (int)balls.size() - 1));
+		collisions.push_back(getNearestCollision((int)balls.size() - 1));
 		time_to_next_ball = BALL_INTERVAL;
 		return;
 	}
@@ -200,11 +200,11 @@ void GameState::simulateStep() {
 	for (int i = 0; i < collisions.size(); ++i) {
 		if (collisions[i].t < mint + SIMULTANEOUS_EPS) {
 			max_processed_t = max(max_processed_t, collisions[i].t);
-			if (is_bottom(collisions[i].id_segment)) {
+			if (is_bottom(collisions[i].object_id)) {
 				ball_death[i] = true;
 			}
-			else if (!is_screen(collisions[i].id_segment)) {
-				lives[collisions[i].id_segment] = max(0, lives[collisions[i].id_segment] - 1);
+			else if (!is_screen(collisions[i].object_id)) {
+				lives[collisions[i].object_id] = max(0, lives[collisions[i].object_id] - 1);
 			}
 		}
 	}
@@ -212,7 +212,7 @@ void GameState::simulateStep() {
 		if (ball_death[i]) continue;
 		double dt = 0;
 		if (collisions[i].t < mint + SIMULTANEOUS_EPS) {
-			if (!is_screen(collisions[i].id_segment) && lives[collisions[i].id_segment] <= 0) {
+			if (!is_screen(collisions[i].object_id) && lives[collisions[i].object_id] <= 0) {
 				dirty = true;
 				balls[i] = collisions[i].continued;
 			}
@@ -221,7 +221,7 @@ void GameState::simulateStep() {
 			}
 			dt = max_processed_t - collisions[i].t;
 			balls[i].advance(dt);
-			collisions[i] = getNearestCollision(balls[i], i);
+			collisions[i] = getNearestCollision(i);
 		}
 		else {
 			dt = max_processed_t;
@@ -229,16 +229,12 @@ void GameState::simulateStep() {
 			collisions[i].t -= dt;
 		}
 	}
-	vector<Ball> next_balls;
-	vector<Collision> next_collisions;
-	for (int i = 0; i < collisions.size(); ++i) {
-		if (!ball_death[i]) {
-			next_balls.push_back(balls[i]);
-			next_collisions.push_back(collisions[i]);
+	for (int i = collisions.size()-1; i >=0; --i) {
+		if (ball_death[i]) {
+			balls.erase(balls.begin() + i);
+			collisions.erase(collisions.begin() + i);
 		}
 	}
-	balls = next_balls;
-	collisions = next_collisions;
 	time_to_next_ball -= max_processed_t;
 }
 
@@ -252,29 +248,29 @@ GameState readState(std::istream& cin) {
 	Segment top_wall = Segment(v2d(w, h), v2d(0, h), SCREEN_BIT);
 	Segment left_wall = Segment(v2d(0, h), v2d(0, 0), SCREEN_BIT);
 	gameState.segments = { bottom_wall,right_wall,top_wall,left_wall };
-	vector<vector<v2d>> objects(m);
 	for (int i = 0; i < m; ++i) {
 		int p;
 		cin >> p;
+		vector<v2d> objects;
 		for (int j = 0; j < p; ++j) {
 			double x, y;
 			cin >> x >> y;
-			objects[i].push_back(v2d{ x,y });
+			objects.push_back(v2d{ x,y });
 		}
 		cin >> gameState.lives[i];
 		for (int j = 0; j < p; ++j) {
 			gameState.segments.push_back(
 				Segment(
-					objects[i][j],
-					objects[i][(j + 1) % p],
+					objects[j],
+					objects[(j + 1) % p],
 					i
 				)
 			);
 		}
 	}
 	gameState.gun = Ray(v2d(l, 0), v2d(r, s));
-	gameState.balls = { Ball(gameState.gun) };
-	gameState.balls_shot = 1;
+	gameState.balls = { };
+	gameState.balls_shot = 0;
 	gameState.time_to_next_ball = BALL_INTERVAL;
 	gameState.total_balls = n;;
 	gameState.amount_objects = m;
