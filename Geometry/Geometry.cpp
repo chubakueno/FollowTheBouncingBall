@@ -104,7 +104,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    std::ifstream inFile("input.txt");
    GameState gameState = readState(inFile);
    gameStates.push_back(gameState);
-   while (gameState.balls_shot < gameState.total_balls || gameState.balls.size()) {
+   while (gameState.balls.size()) {
        gameState.simulateStep();
        gameStates.push_back(gameState);
    }

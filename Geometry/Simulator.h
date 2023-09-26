@@ -1,18 +1,9 @@
-// File: GameSimulation.h
-
-#ifndef GAMESIMULATION_H
-#define GAMESIMULATION_H
+#pragma once
 
 #include <vector>
 #include <cmath>
 #include <iostream>
 #include <fstream>
-
-const double EPS = 1e-9;
-const double INF = 1e9;
-const int SCREEN_BIT = (1 << 20);
-const int BOTTOM_BIT = (1 << 21);
-const double SIMULTANEOUS_EPS = 1e-7;
 
 struct v2d {
     double x, y;
@@ -59,9 +50,6 @@ struct Collision {
     Collision();
 };
 
-bool is_screen(int id);
-bool is_bottom(int id);
-
 typedef Ray Ball;
 
 struct GameState {
@@ -70,13 +58,10 @@ struct GameState {
     std::vector<Ball> balls;
     std::vector<Segment> segments;
     std::vector<Collision> collisions;
-    double time_to_next_ball;
-    int balls_shot, total_balls, amount_objects;
+    int amount_objects;
     bool dirty;
     GameState();
     void printState();
     void simulateStep();
 };
 GameState readState(std::istream& cin);
-
-#endif  // GAMESIMULATION_H

@@ -105,8 +105,8 @@ bool Ray::intersect(const Segment& s, Collision& collision) {
 	bool success = intersect(s.asRay, a, b);
 	if (success && comp_lenient(b, s.length)) {
 		v2d pt = ori + dir * a;
-		collision.continued = Ray(pt, dir, false);
-		collision.reflected = Ray(pt, s.reflect(dir), false);
+		collision.continued = Ray(pt, dir, false);//dir is already normalized
+		collision.reflected = Ray(pt, s.reflect(dir), false);//reflect already returns a normalized vector
 		collision.t = a;
 		return true;
 	}
@@ -114,17 +114,8 @@ bool Ray::intersect(const Segment& s, Collision& collision) {
 }
 typedef Ray Ball;
 
-const int SCREEN_BIT = (1 << 20);
-const int BOTTOM_BIT = (1 << 21);
+const int SCREEN_ID = 21;
 const double SIMULTANEOUS_EPS = 1e-7;
-const double BALL_INTERVAL = 1;
-
-bool is_screen(int id) {
-	return id & SCREEN_BIT;
-}
-bool is_bottom(int id) {
-	return id & BOTTOM_BIT;
-}
 
 struct GameState {
 	int lives[25];
@@ -132,9 +123,6 @@ struct GameState {
 	vector<Ball> balls;
 	vector<Segment> segments;
 	vector<Collision> collisions;
-	double time_to_next_ball = 0;
-	int balls_shot = 0;
-	int total_balls = 0;
 	int amount_objects = 0;
 	bool dirty = true;
 	GameState() {
@@ -149,13 +137,13 @@ struct GameState {
 		cout << endl;
 	}
 
-	Collision getNearestCollision(int ball_index) {
+	bool getNearestCollision(int ball_index, Collision & collision) {
+		bool success = false;
 		Ball ball = balls[ball_index];
 		double mint = INF;
-		Collision collision;
 		Collision cur_collision;
 		for (const Segment& s : segments) {
-			if (!is_screen(s.object_id) && lives[s.object_id] <= 0) continue;
+			if (lives[s.object_id] <= 0) continue;
 			bool intersected = ball.intersect(s, cur_collision);
 			if (intersected && comp_strict(0, cur_collision.t)) {
 				if (mint > cur_collision.t) {//we want exact comparison here without EPS
@@ -163,20 +151,24 @@ struct GameState {
 					collision = cur_collision;
 					collision.ball_index = ball_index;
 					collision.object_id = s.object_id;
+					success = true;
 				}
 			}
 		}
-		return collision;
+		return success;
 	}
 	void simulateStep();
 };
 
 void GameState::simulateStep() {
 	if (dirty) {
-		collisions = vector<Collision>();
-		for (int i = 0; i < balls.size(); ++i) {
-			Collision collision = getNearestCollision(i);
-			collisions.push_back(collision);
+		collisions = vector<Collision>(balls.size());
+		for (int i = (int)balls.size() - 1; i >= 0; --i) {
+			bool success = getNearestCollision(i, collisions[i]);
+			if (!success) {
+				balls.erase(balls.begin() + i);
+				collisions.erase(collisions.begin() + i);
+			}
 		}
 		dirty = false;
 	}
@@ -184,58 +176,36 @@ void GameState::simulateStep() {
 	for (int i = 0; i < collisions.size(); ++i) {
 		mint = min(mint, collisions[i].t);
 	}
-	if (balls_shot < total_balls && time_to_next_ball < mint) {
-		++balls_shot;
-		for (int i = 0; i < balls.size(); ++i) {
-			balls[i].advance(time_to_next_ball);
-			collisions[i].t -= time_to_next_ball;
-		}
-		balls.push_back(Ball(gun));
-		collisions.push_back(getNearestCollision((int)balls.size() - 1));
-		time_to_next_ball = BALL_INTERVAL;
-		return;
-	}
-	vector<bool> ball_death(collisions.size());
 	double max_processed_t = -INF;
 	for (int i = 0; i < collisions.size(); ++i) {
 		if (collisions[i].t < mint + SIMULTANEOUS_EPS) {
 			max_processed_t = max(max_processed_t, collisions[i].t);
-			if (is_bottom(collisions[i].object_id)) {
-				ball_death[i] = true;
-			}
-			else if (!is_screen(collisions[i].object_id)) {
-				lives[collisions[i].object_id] = max(0, lives[collisions[i].object_id] - 1);
-			}
+			lives[collisions[i].object_id] = max(0, lives[collisions[i].object_id] - 1);
 		}
 	}
-	for (int i = 0; i < collisions.size(); ++i) {
-		if (ball_death[i]) continue;
-		double dt = 0;
+	for (int i = (int)collisions.size() - 1; i >= 0; --i) {
 		if (collisions[i].t < mint + SIMULTANEOUS_EPS) {
-			if (!is_screen(collisions[i].object_id) && lives[collisions[i].object_id] <= 0) {
+			if (lives[collisions[i].object_id] <= 0) {
 				dirty = true;
 				balls[i] = collisions[i].continued;
 			}
 			else {
 				balls[i] = collisions[i].reflected;
 			}
-			dt = max_processed_t - collisions[i].t;
+			double dt = max_processed_t - collisions[i].t;
 			balls[i].advance(dt);
-			collisions[i] = getNearestCollision(i);
+			bool success = getNearestCollision(i, collisions[i]);
+			if (!success) {
+				balls.erase(balls.begin() + i);
+				collisions.erase(collisions.begin() + i);
+			}
 		}
 		else {
-			dt = max_processed_t;
+			double dt = max_processed_t;
 			balls[i].advance(dt);
 			collisions[i].t -= dt;
 		}
 	}
-	for (int i = collisions.size()-1; i >=0; --i) {
-		if (ball_death[i]) {
-			balls.erase(balls.begin() + i);
-			collisions.erase(collisions.begin() + i);
-		}
-	}
-	time_to_next_ball -= max_processed_t;
 }
 
 GameState readState(std::istream& cin) {
@@ -243,11 +213,10 @@ GameState readState(std::istream& cin) {
 	int w, h, n, m;
 	double l, r, s;
 	cin >> w >> h >> n >> m >> l >> r >> s;
-	Segment bottom_wall = Segment(v2d(0, 0), v2d(w, 0), SCREEN_BIT | BOTTOM_BIT);
-	Segment right_wall = Segment(v2d(w, 0), v2d(w, h), SCREEN_BIT);
-	Segment top_wall = Segment(v2d(w, h), v2d(0, h), SCREEN_BIT);
-	Segment left_wall = Segment(v2d(0, h), v2d(0, 0), SCREEN_BIT);
-	gameState.segments = { bottom_wall,right_wall,top_wall,left_wall };
+	Segment right_wall = Segment(v2d(w, 0), v2d(w, h), SCREEN_ID);
+	Segment top_wall = Segment(v2d(w, h), v2d(0, h), SCREEN_ID);
+	Segment left_wall = Segment(v2d(0, h), v2d(0, 0), SCREEN_ID);
+	gameState.segments = { right_wall,top_wall,left_wall };
 	for (int i = 0; i < m; ++i) {
 		int p;
 		cin >> p;
@@ -270,17 +239,18 @@ GameState readState(std::istream& cin) {
 	}
 	gameState.gun = Ray(v2d(l, 0), v2d(r, s));
 	gameState.balls = { };
-	gameState.balls_shot = 0;
-	gameState.time_to_next_ball = BALL_INTERVAL;
-	gameState.total_balls = n;;
+	for (int i = 0; i < n; ++i) {
+		gameState.balls.push_back(Ball(gameState.gun.ori - i * gameState.gun.dir, gameState.gun.dir));
+	}
 	gameState.amount_objects = m;
+	gameState.lives[SCREEN_ID] = 1e9;
 
 	return gameState;
 }
 
 int main() {
 	GameState gameState = readState(std::cin);
-	while (gameState.balls_shot < gameState.total_balls || gameState.balls.size()) {
+	while (gameState.balls.size()) {
 		gameState.simulateStep();
 	}
 	gameState.printState();
