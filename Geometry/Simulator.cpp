@@ -115,10 +115,11 @@ bool Ray::intersect(const Segment& s, Collision& collision) {
 typedef Ray Ball;
 
 const int SCREEN_ID = 21;
+const int MAX_OBJECTS = 25;
 const double SIMULTANEOUS_EPS = 1e-7;
 
 struct GameState {
-	int lives[25];
+	int lives[MAX_OBJECTS];
 	Ray gun;
 	vector<Ball> balls;
 	vector<Segment> segments;
